@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+
+@layer utilities {
+    /* Hide scrollbar for Chrome, Safari, and Opera */
+    .no-scrollbar::-webkit-scrollbar {
+    display: none;
+    }
+    /* Hide scrollbar for IE, Edge, and Firefox */
+    .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+    }
+    }
+
+@layer base {
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 240 10% 3.9%;
+      --card: 0 0% 100%;
+      --card-foreground: 240 10% 3.9%;
+      --popover: 0 0% 100%;
+      --popover-foreground: 240 10% 3.9%;
+      --primary: 142 76% 36%;
+      --primary-foreground: 355.7 100% 97.3%;
+      --secondary: 240 4.8% 95.9%;
+      --secondary-foreground: 240 5.9% 10%;
+      --muted: 240 4.8% 95.9%;
+      --muted-foreground: 240 3.8% 46.1%;
+      --accent: 240 4.8% 95.9%;
+      --accent-foreground: 240 5.9% 10%;
+      --destructive: 0 84.2% 60.2%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 240 5.9% 90%;
+      --input: 240 5.9% 90%;
+      --ring: 142 76% 36%;
+      --radius: 0.5rem;
+    }
+  
+    .dark {
+      --background: 240 10% 3.9%;
+      --foreground: 0 0% 98%;
+      --card: 240 10% 3.9%;
+      --card-foreground: 0 0% 98%;
+      --popover: 240 10% 3.9%;
+      --popover-foreground: 0 0% 98%;
+      --primary: 142 76% 46%;
+      --primary-foreground: 144.9 80.4% 10%;
+      --secondary: 240 3.7% 15.9%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 240 3.7% 15.9%;
+      --muted-foreground: 240 5% 64.9%;
+      --accent: 240 3.7% 15.9%;
+      --accent-foreground: 0 0% 98%;
+      --destructive: 0 84.2% 60.2%;
+      --destructive-foreground: 0 0% 98%;
+      --border: 240 3.7% 15.9%;
+      --input: 240 3.7% 15.9%;
+      --ring: 142 76% 46%;
+    }
+  
+    /* Custom classes for neon effects */
+    .neon-green {
+      color: rgb(0, 255, 136);
+      text-shadow: 0 0 5px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.3);
+    }
+  
+    .neon-red {
+      color: rgb(255, 53, 53);
+      text-shadow: 0 0 5px rgba(255, 53, 53, 0.5), 0 0 10px rgba(255, 53, 53, 0.3);
+    }
+  
+    .bg-neon-green {
+      background-color: rgb(0, 255, 136);
+      box-shadow: 0 0 5px rgba(0, 255, 136, 0.5), 0 0 10px rgba(0, 255, 136, 0.3);
+    }
+  
+    .bg-neon-red {
+      background-color: rgb(255, 53, 53);
+      box-shadow: 0 0 5px rgba(255, 53, 53, 0.5), 0 0 10px rgba(255, 53, 53, 0.3);
+    }
+
+    /* QR Scanner Styles */
+    #qr-reader {
+      width: 100% !important;
+      border: none !important;
+      background: #000 !important;
+    }
+    
+    #qr-reader__scan_region {
+      background: transparent !important;
+    }
+    
+    #qr-reader__scan_region > img {
+      display: none;
+    }
+    
+    #qr-reader__dashboard {
+      background: #1f2937 !important;
+      padding: 8px !important;
+    }
+    
+    #qr-reader__dashboard > button {
+      background: #374151 !important;
+      color: white !important;
+      border: none !important;
+      padding: 4px 8px !important;
+      border-radius: 4px !important;
+    }
+    
+    #qr-reader__status {
+      color: #9ca3af !important;
+      background: transparent !important;
+    }
+
+    /* QR Scanner custom styles */
+    #qr-reader {
+      border: none !important;
+      width: 100% !important;
+    }
+    
+    #qr-reader__status_span {
+      background: transparent !important;
+      color: #9ca3af !important;
+    }
+    
+    #qr-reader__dashboard {
+      padding: 8px !important;
+      background: #1f2937 !important;
+    }
+    
+    #qr-reader__dashboard button {
+      background: #374151 !important;
+      color: white !important;
+      border: none !important;
+      padding: 4px 8px !important;
+      border-radius: 4px !important;
+      margin: 4px !important;
+    }
+    
+    #qr-reader video {
+      border-radius: 8px !important;
+    }
+  }
+
