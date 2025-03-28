@@ -1,207 +1,116 @@
-import React, { useState, useEffect } from 'react';
-import { User, Calendar, Award, Clock, CheckCircle, XCircle, QrCode, LogOut } from 'lucide-react';
-import { toast } from 'react-hot-toast';
-import { useAuth } from '../contexts/AuthContext';
-import api from '../api/api';
-import QrScanner from '../components/QrScanner';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { QrCode, User, Calendar, Award, Clock, CheckCircle, XCircle } from 'lucide-react';
 
 const StudentDashboard = () => {
-  const [studentData, setStudentData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [showScanner, setShowScanner] = useState(false);
-  const { user, logout } = useAuth();
-  const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('attendance');
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
 
-  // Add default values for attendance stats
-  const defaultStats = {
-    totalDays: 0,
-    present: 0,
-    absent: 0,
-    percentage: 0
-  };
+  const attendanceRecords = [
+    { date: 'March 27, 2025', time: '12:00 am', status: 'Present' },
+    { date: 'March 26, 2025', time: '12:00 am', status: 'Absent' },
+    { date: 'March 25, 2025', time: '12:00 am', status: 'Present' },
+    { date: 'March 24, 2025', time: '12:00 am', status: 'Present' },
+    { date: 'March 23, 2025', time: '12:00 am', status: 'Absent' },
+  ];
 
-  const attendanceStats = studentData?.attendanceStats || defaultStats;
-
-  const fetchStudentData = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Not authenticated');
-      }
-
-      const response = await api.get('/students/complete-profile');
-      
-      // Transform dates and format attendance data
-      const transformedData = {
-        ...response.data,
-        recentAttendance: response.data.recentAttendance.map(record => ({
-          ...record,
-          date: new Date(record.date).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-          }),
-          time: record.timing ? new Date(record.timing.startTime).toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit'
-          }) : 'N/A'
-        }))
-      };
-      
-      setStudentData(transformedData);
-      setLoading(false);
-    } catch (error) {
-      console.error('Failed to fetch student data:', error);
-      toast.error('Failed to load profile data');
-      setLoading(false);
-    }
-  };
-
-  const handleScan = async (decodedText) => {
-    try {
-      const response = await api.post('/attendance/mark', { qrCode: decodedText });
-      toast.success('Attendance marked successfully!');
-      fetchStudentData();
-    } catch (error) {
-      toast.error(error.response?.data?.message || 'Failed to mark attendance');
-    } finally {
-      setShowScanner(false);
-    }
-  };
-
-  const handleLogout = () => {
-    logout();
-  };
-
-  useEffect(() => {
-    const fetchStudentData = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Not authenticated');
-        }
-
-        const response = await api.get('/students/complete-profile');
-        
-        // Transform dates and format attendance data
-        const transformedData = {
-          ...response.data,
-          recentAttendance: response.data.recentAttendance.map(record => ({
-            ...record,
-            date: new Date(record.date).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'short',
-              day: 'numeric'
-            }),
-            time: record.timing ? new Date(record.timing.startTime).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit'
-            }) : 'N/A'
-          }))
-        };
-        
-        setStudentData(transformedData);
-        setLoading(false);
-      } catch (error) {
-        console.error('Failed to fetch student data:', error);
-        toast.error('Failed to load profile data');
-        setLoading(false);
-      }
-    };
-
-    fetchStudentData();
-  }, []);
-
-  if (loading) {
-    return <div className="flex items-center justify-center min-h-screen">
-      <div className="text-green-500">Loading...</div>
-    </div>;
-  }
-
-  return (
-    <div className="bg-black text-white min-h-screen p-6 font-sans">
-      <div className="flex justify-between items-center mb-8">
-        <div className="text-3xl font-bold mb-10 text-white">
-          Smart<span className="text-green-500">Attend</span>
+  const QRAttendanceModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-gray-900 p-8 rounded-2xl shadow-2xl text-center transform transition-all duration-300 hover:scale-[1.02]">
+        <h2 className="text-2xl font-bold mb-6 text-green-500">Scan QR for Attendance</h2>
+        <div className="flex justify-center mb-6">
+          <div className="w-72 h-72 bg-gray-800 flex items-center justify-center rounded-2xl shadow-2xl">
+            <QrCode size={250} className="text-green-500 animate-pulse" />
+          </div>
         </div>
-        <div className="flex gap-4">
-          <button
-            onClick={() => setShowScanner(true)}
-            className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 transition-all duration-300"
+        <p className="text-gray-400 mb-6">
+          Position the QR code within the camera frame to mark your attendance
+        </p>
+        <div className="flex justify-center space-x-4">
+          <button 
+            onClick={() => setShowQRModal(false)} 
+            className="px-6 py-3 bg-gray-800 text-white rounded-lg hover:bg-gray-700 transition-colors duration-300"
           >
-            <QrCode size={20} />
-            Scan QR
+            Cancel
           </button>
-          <button
-            onClick={() => {
-                localStorage.removeItem("token");
-                navigate("/login")
-            }}
-            className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 transition-all duration-300"
+          <button 
+            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all duration-300 transform hover:scale-105"
           >
-            <LogOut size={20} />
-            Logout
+            Confirm Attendance
           </button>
         </div>
       </div>
+    </div>
+  );
 
-      {showScanner && (
-        <QrScanner
-          onScan={handleScan}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
+  return (
+    <div className="bg-black text-white min-h-screen p-6 font-sans">
+      {showQRModal && <QRAttendanceModal />}
+      
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">CheckIn Buddy</h1>
+        <button 
+          onClick={() => setShowQRModal(true)}
+          className="bg-green-600 text-white px-6 py-3 rounded-lg flex items-center 
+                     hover:bg-green-700 transition-all duration-300 
+                     transform hover:scale-105 active:scale-95 shadow-lg"
+        >
+          <QrCode className="mr-3" size={24} /> 
+          QR Attendance
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
         {/* Profile Card */}
-        <div className="bg-gray-900 p-8 rounded-2xl shadow-2xl hover:scale-[1.02] transition-all">
+        <div className="bg-gray-900 p-8 rounded-2xl 
+                        shadow-2xl 
+                        transform transition-all duration-300 
+                        hover:scale-[1.02] hover:shadow-2xl">
           <div className="flex items-center mb-6">
-            <div className="w-20 h-20 bg-gray-800 rounded-full overflow-hidden">
-              {studentData?.photo ? (
-                <img 
-                  src={studentData.photo} 
-                  alt={studentData?.name || 'Student'}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.src = 'default-avatar.png';
-                  }}
-                />
-              ) : (
-                <User size={40} className="w-full h-full p-4 text-white" />
-              )}
+            <div className="w-20 h-20 bg-gray-800 rounded-full 
+                            flex items-center justify-center mr-6 
+                            shadow-2xl 
+                            transform transition-transform duration-500 
+                            hover:rotate-6">
+              <User size={40} className="text-white" />
             </div>
-            <div className="ml-6">
-              <h2 className="text-2xl font-bold text-green-500">{studentData?.name || 'Loading...'}</h2>
-              <p className="text-gray-400">{studentData?.rollNumber || 'Loading...'}</p>
+            <div>
+              <h2 className="text-2xl font-bold text-green-500">Alex Johnson</h2>
+              <p className="text-gray-400">STU02023042</p>
             </div>
           </div>
           <div className="space-y-4 text-gray-300">
             <div className="flex items-center">
               <Award className="mr-3 text-green-500" size={20} />
-              <p>Department: {studentData?.department || 'Loading...'}</p>
+              <p>Department: Computer Science</p>
             </div>
             <div className="flex items-center">
               <Clock className="mr-3 text-green-500" size={20} />
-              <p>Semester: {studentData?.semester || 'Loading...'}</p>
+              <p>Semester: 4th Semester</p>
             </div>
             <div className="flex items-center">
               <Calendar className="mr-3 text-green-500" size={20} />
-              <p>Class: {studentData?.class?.name || 'Loading...'}</p>
+              <p>Academic Year: 2023-2024</p>
+            </div>
+            <div className="flex items-center">
+              <CheckCircle className="mr-3 text-green-500" size={20} />
+              <p>Student Status: <span className="text-green-500 font-bold">Active</span></p>
             </div>
           </div>
         </div>
 
         {/* Attendance Summary */}
-        <div className="bg-gray-900 p-8 rounded-2xl shadow-2xl hover:scale-[1.02] transition-all">
+        <div className="bg-gray-900 p-8 rounded-2xl 
+                        shadow-2xl 
+                        transform transition-all duration-300 
+                        hover:scale-[1.02] hover:shadow-2xl">
           <h3 className="text-2xl font-bold mb-6 text-green-500">Attendance Summary</h3>
           <div className="grid grid-cols-2 gap-6">
             {[
-              { label: 'Total Days', value: attendanceStats.totalDays, icon: Clock },
-              { label: 'Present', value: attendanceStats.present, icon: CheckCircle },
-              { label: 'Absent', value: attendanceStats.absent, icon: XCircle },
-              { label: 'Percentage', value: `${attendanceStats.percentage}%`, icon: Award }
+              { label: 'Total Days', value: '19', color: 'text-white', icon: Clock },
+              { label: 'Present', value: '12', color: 'text-green-500', icon: CheckCircle },
+              { label: 'Absent', value: '7', color: 'text-red-500', icon: XCircle },
+              { label: 'Percentage', value: '63%', color: 'text-yellow-500', icon: Award }
             ].map((item, index) => (
               <div 
                 key={index} 
@@ -211,9 +120,9 @@ const StudentDashboard = () => {
               >
                 <div className="flex justify-between items-center mb-3">
                   <p className="text-gray-400">{item.label}</p>
-                  <item.icon className="text-white" size={24} />
+                  <item.icon className={`${item.color}`} size={24} />
                 </div>
-                <p className="text-3xl font-bold text-white">{item.value}</p>
+                <p className={`text-3xl font-bold ${item.color}`}>{item.value}</p>
               </div>
             ))}
           </div>
@@ -224,10 +133,13 @@ const StudentDashboard = () => {
       <div className="bg-gray-900 p-8 rounded-2xl shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-2xl font-bold text-green-500">Attendance Records</h3>
-          <select className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-all duration-300">
-            <option>All Records</option>
-            <option>This Month</option>
-            <option>Previous Month</option>
+          <select className="bg-gray-800 
+                             text-white px-4 py-2 rounded-lg 
+                             hover:bg-gray-700 
+                             transition-all duration-300">
+            <option>March</option>
+            <option>February</option>
+            <option>January</option>
           </select>
         </div>
         <div className="overflow-x-auto">
@@ -236,33 +148,33 @@ const StudentDashboard = () => {
               <tr>
                 <th className="text-left py-4 text-gray-400">Date</th>
                 <th className="text-left py-4 text-gray-400">Time</th>
-                <th className="text-left py-4 text-gray-400">Subject</th>
                 <th className="text-left py-4 text-gray-400">Status</th>
               </tr>
             </thead>
             <tbody>
-              {studentData?.recentAttendance?.length > 0 ? (
-                studentData.recentAttendance.map((record, index) => (
-                  <tr key={index} className="border-b border-gray-700 hover:bg-gray-800">
-                    <td className="py-4">{record.date}</td>
-                    <td className="py-4">{record.time}</td>
-                    <td className="py-4">{record.subject}</td>
-                    <td className="py-4">
-                      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                        record.status === 'present' ? 'bg-green-600' : 'bg-red-600'
-                      } text-white`}>
-                        {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="4" className="py-4 text-center text-gray-400">
-                    No attendance records found
+              {attendanceRecords.map((record, index) => (
+                <tr 
+                  key={index} 
+                  className="border-b border-gray-700 
+                             hover:bg-gray-800 transition-colors duration-300 
+                             cursor-pointer"
+                  onClick={() => setSelectedRecord(record)}
+                >
+                  <td className="py-4">{record.date}</td>
+                  <td className="py-4">{record.time}</td>
+                  <td className="py-4">
+                    <span className={`
+                      px-3 py-1 rounded-full text-sm font-semibold
+                      ${record.status === 'Present' 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-red-600 text-white'}
+                      hover:opacity-80 transition-opacity duration-300
+                    `}>
+                      {record.status}
+                    </span>
                   </td>
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
         </div>

@@ -99,18 +99,16 @@ export const api = {
   generateAttendanceReport: async (data) => {
     try {
       const response = await axiosInstance.post('/attendance/report', data, {
-        responseType: 'blob', // Change to blob
+        responseType: 'arraybuffer', // Important for PDF download
         headers: {
-          'Accept': 'application/pdf',
-          'Content-Type': 'application/json'
+          'Accept': 'application/pdf'
         }
       });
-      return new Blob([response], { type: 'application/pdf' });
+      return response;
     } catch (error) {
       if (error.response?.data) {
-        // Handle error response as blob
-        const text = await new Response(error.response.data).text();
-        throw new Error(text || 'Failed to generate report');
+        const decodedError = new TextDecoder().decode(error.response.data);
+        throw new Error(decodedError);
       }
       throw error;
     }
@@ -145,20 +143,10 @@ export const api = {
 
   getStudentProfile: async () => {
     try {
-      // For teacher role, use teacher profile endpoint
-      const token = localStorage.getItem('token');
-      const userRole = localStorage.getItem('role') || 'teacher'; // Default to teacher if no role
-      
-      if (userRole === 'teacher') {
-        const response = await axiosInstance.get('/teacher/profile');
-        return response;
-      } else if (userRole === 'student') {
-        const response = await axiosInstance.get('/student/profile');
-        return response;
-      }
-      throw new Error('Invalid user role: ' + userRole);
+      const response = await axiosInstance.get('/student/complete-profile');
+      return response;
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error fetching student profile:', error);
       throw error;
     }
   },
@@ -220,87 +208,6 @@ export const api = {
     } catch (error) {
       console.error('Error triggering notification:', error);
       throw error;
-    }
-  },
-
-  getStudentReport: async (classId, subjectId) => {
-    try {
-      if (!classId || !subjectId) {
-        throw new Error('Class ID and Subject ID are required');
-      }
-  
-      const response = await axiosInstance.get('/attendance/student-report', {
-        params: {
-          classId,
-          subjectName: subjectId // Change subjectId to subjectName to match backend
-        }
-      });
-      
-      // Handle null/undefined response
-      if (!response || !response.data) {
-        return {
-          success: true,
-          data: []
-        };
-      }
-  
-      return {
-        success: true,
-        data: response.data.map(student => ({
-          name: student?.name || 'N/A',
-          rollNumber: student?.rollNumber || 'N/A',
-          totalLectures: student?.totalLectures || 0,
-          present: student?.present || 0,
-          absent: student?.absent || 0,
-          percentage: student?.percentage || 0
-        }))
-      };
-    } catch (error) {
-      console.error('Error fetching student report:', error);
-      throw error;
-    }
-  },
-
-  getMonthlyReport: async (classId) => {
-    try {
-      if (!classId) {
-        throw new Error('Class ID is required');
-      }
-
-      const response = await axiosInstance.get('/attendance/monthly-report', {
-        params: { classId }
-      });
-
-      if (!response.success || !response.summary) {
-        return {
-          success: false,
-          summary: {
-            totalStudents: 0,
-            present: 0,
-            absent: 0,
-            percentage: 0
-          }
-        };
-      }
-
-      return {
-        success: true,
-        summary: response.summary,
-        dateRange: response.dateRange
-      };
-
-    } catch (error) {
-      console.error('Error fetching monthly report:', error);
-      return {
-        success: false,
-        message: error.response?.data?.message || error.message,
-        summary: {
-          totalStudents: 0,
-          present: 0,
-          absent: 0,
-          percentage: 0
-        }
-      };
     }
   }
 };

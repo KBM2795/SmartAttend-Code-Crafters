@@ -1,7 +1,12 @@
 import mongoose from 'mongoose';
 
 const qrSessionSchema = new mongoose.Schema({
-  classId: {
+  teacher: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Teacher',
+    required: true
+  },
+  class: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
     required: true
@@ -10,11 +15,55 @@ const qrSessionSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    expires: 300 // Document will be automatically deleted after 5 minutes
-  }
-});
+  location: {
+    type: {
+      type: String,
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number],
+      required: true
+    },
+    radius: {
+      type: Number,
+      default: 100 // meters
+    }
+  },
+  timing: {
+    startTime: {
+      type: Date,
+      required: true
+    },
+    endTime: {
+      type: Date,
+      required: true
+    }
+  },
+  sessionToken: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  active: {
+    type: Boolean,
+    default: true
+  },
+  markedAttendance: [{
+    student: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Student'
+    },
+    timestamp: Date,
+    location: {
+      type: {
+        type: String,
+        default: 'Point'
+      },
+      coordinates: [Number]
+    }
+  }]
+}, { timestamps: true });
 
-export default mongoose.model('QRSession', qrSessionSchema);
+qrSessionSchema.index({ location: '2dsphere' });
+const QRSession = mongoose.model('QRSession', qrSessionSchema);
+export default QRSession;

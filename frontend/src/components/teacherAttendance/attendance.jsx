@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { QrCode, Camera, Check, X, Filter, Users, Clock, Book, Calendar } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import { api } from '../../services/api';
 import { format } from 'date-fns';
-import { useAuth } from '../../contexts/AuthContext'; // Add this import
 
 const AttendanceDashboard = () => {
-  const { user } = useAuth(); // Add this
   const [students, setStudents] = useState([]);
   const [activeModal, setActiveModal] = useState(null);
   const [filters, setFilters] = useState({
@@ -21,8 +18,6 @@ const AttendanceDashboard = () => {
   });
   const [selectedSubject, setSelectedSubject] = useState('');
   const [subjects, setSubjects] = useState([]);
-  const [qrData, setQrData] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null);
 
   useEffect(() => {
     fetchTeacherData();
@@ -33,23 +28,6 @@ const AttendanceDashboard = () => {
       fetchStudents(filters.class);
     }
   }, [filters.class]);
-
-  useEffect(() => {
-    // Get current location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCurrentLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-        }
-      );
-    }
-  }, []);
 
   const fetchTeacherData = async () => {
     try {
@@ -139,63 +117,6 @@ const AttendanceDashboard = () => {
     }
   };
 
-  const generateQRData = () => {
-    if (!filters.class || !selectedSubject || !attendanceTime.startTime || !attendanceTime.endTime) {
-      alert('Please select class, subject, and time first');
-      return;
-    }
-
-    const selectedClass = teacherClasses.find(c => c._id === filters.class);
-    const qrData = {
-      classId: filters.class,
-      className: `${selectedClass.name}${selectedClass.section}`,
-      subject: selectedSubject,
-      date: filters.date,
-      startTime: attendanceTime.startTime,
-      endTime: attendanceTime.endTime,
-      teacher: user?.name || 'Unknown Teacher',
-      location: currentLocation || 'Location not available',
-      timestamp: new Date().toISOString()
-    };
-
-    setQrData(qrData);
-    setActiveModal('qr');
-  };
-
-  const QRModal = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-[#1f1f1f] p-6 rounded-2xl shadow-xl border border-[#2a2a2a] w-96">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-gray-200">Attendance QR Code</h2>
-          <button 
-            onClick={() => setActiveModal(null)}
-            className="text-gray-400 hover:text-white"
-          >
-            <X size={24} />
-          </button>
-        </div>
-        <div className="bg-white p-4 rounded-lg mb-4">
-          <QRCodeSVG
-            value={JSON.stringify(qrData)}
-            size={256}
-            level="H"
-            className="w-full"
-          />
-        </div>
-        <div className="space-y-2 text-sm text-gray-400">
-          <p>Class: {qrData?.className}</p>
-          <p>Subject: {qrData?.subject}</p>
-          <p>Date: {new Date(qrData?.date).toLocaleDateString()}</p>
-          <p>Time: {qrData?.startTime} - {qrData?.endTime}</p>
-          <p>Teacher: {qrData?.teacher}</p>
-          {currentLocation && (
-            <p>Location: {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div className="bg-gradient-to-br from-[#121212] to-[#1e1e1e] min-h-screen text-white p-6 font-sans">
       {/* Header Section */}
@@ -211,7 +132,7 @@ const AttendanceDashboard = () => {
         </div>
         <div className="flex space-x-4">
           <button 
-            onClick={generateQRData}
+            onClick={() => setActiveModal('qr')}
             className="bg-gradient-to-r from-green-500 to-green-600 text-white px-5 py-2.5 rounded-lg flex items-center hover:scale-105 transition-transform shadow-lg"
           >
             <QrCode className="mr-2" size={20} /> QR Scan
@@ -419,7 +340,6 @@ const AttendanceDashboard = () => {
           </div>
         </div>
       </div>
-      {activeModal === 'qr' && <QRModal />}
     </div>
   );
 };
