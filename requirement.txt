@@ -1,0 +1,82 @@
+Frontend Requirements:
+-------------------
+Node.js >= 16.0.0
+npm >= 8.0.0
+Vite >= 4.0.0
+
+Core Dependencies:
+- React >= 19.0.0
+- React Router DOM >= 7.4.0
+- Axios >= 1.8.4
+- Tailwind CSS >= 4.0.17
+- Lucide React >= 0.484.0
+- React Hot Toast >= 2.5.2
+- Date-fns >= 4.1.0
+- QR Code Libraries:
+  - qrcode >= 1.5.4
+  - qrcode.react >= 4.2.0
+  - html5-qrcode >= 2.3.8
+  - @yudiel/react-qr-scanner >= 2.2.1
+
+Backend Requirements:
+------------------
+Node.js >= 16.0.0
+npm >= 8.0.0
+MongoDB >= 5.0.0
+
+Core Dependencies:
+- Express >= 4.21.2
+- Mongoose >= 8.9.5
+- Cors >= 2.8.5
+- JWT (jsonwebtoken) >= 9.0.2
+- Bcrypt >= 5.1.1
+- Multer >= 1.4.5
+- Dotenv >= 16.4.7
+
+Development Tools:
+----------------
+- nodemon >= 3.1.9
+- ESLint >= 9.21.0
+- Vite >= 6.2.0
+
+Environment Setup:
+---------------
+1. MongoDB database
+2. Environment variables:
+   Frontend (.env):
+   - VITE_API_URL=http://localhost:3000/api
+
+   Backend (.env):
+   - PORT=3000
+   - MONGODB_URI=mongodb://localhost:27017/smartattend
+   - JWT_SECRET=your_jwt_secret
+   - NODE_ENV=development
+
+Installation Instructions:
+-----------------------
+1. Frontend:
+   cd frontend
+   npm install
+   npm run dev
+
+2. Backend:
+   cd server
+   npm install
+   npm start
+
+3. Database:
+   - Install MongoDB
+   - Create database 'smartattend'
+   - Ensure MongoDB service is running
+
+Additional Requirements:
+---------------------
+- Modern web browser with camera access support
+- Internet connection
+- Geolocation services enabled
+- Minimum screen resolution: 320px width (mobile)
+
+Storage Requirements:
+------------------
+- Disk space for uploads: minimum 1GB
+- RAM: minimum 2GB
