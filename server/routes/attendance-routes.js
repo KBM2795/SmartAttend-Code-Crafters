@@ -7,7 +7,8 @@ import {
   getTodayClassReport,
   createQRSession,
   markAttendanceByQR,
-  verifyQRLocation
+  verifyQRLocation,
+  getStudentWiseReport
 } from '../controllers/attendance-controller.js';
 import authMiddleware from '../middleware/authMiddleware.js';
 
@@ -20,7 +21,9 @@ router.post('/report', generateAttendanceReport);
 router.get('/daily-report', getDailyReport);
 router.get('/monthly-report', getDailyReport);
 router.get('/today-class-report', getTodayClassReport);
+router.get('/student-report', getStudentWiseReport); // Add this line
 
+// QR Attendance routes
 router.post('/qr-session', createQRSession);
 router.post('/mark-by-qr', markAttendanceByQR);
 router.post('/verify-location', verifyQRLocation);

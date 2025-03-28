@@ -42,13 +42,15 @@ const authContext = ({children}) => {
     },[])
     
 
-    const login =(user) =>{
-       setUser(user)
+    const login = (userData) => {
+       setUser(userData)
+       localStorage.setItem('user', JSON.stringify(userData))
     }
 
-    const logout =() =>{
+    const logout = () => {
         setUser(null)
         localStorage.removeItem("token")
+        localStorage.removeItem("user")
     }
   return (
      <userContext.Provider value={{user, login, logout, loading}}>

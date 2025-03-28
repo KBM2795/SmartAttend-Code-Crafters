@@ -4,6 +4,7 @@ import Student from '../models/student-model.js';
 import User from '../models/user-model.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import Attendance from '../models/attendance-model.js';
 
 // Get all students
 export const getAllStudents = async (req, res) => {
@@ -202,24 +203,70 @@ export const getStudentPhoto = async (req, res) => {
 
 export const getCompleteProfile = async (req, res) => {
   try {
-    const studentId = req.user.studentId; // Assuming this comes from auth middleware
+    const userId = req.user._id;
+    console.log('Looking up complete profile for userId:', userId);
 
-    const student = await Student.findById(studentId)
-      .populate('userDetails', '-password') // Populate user details except password
-      .populate('class')
-      .lean();
-
+    // Get student details
+    const student = await Student.findOne({ userId }).populate('class');
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    // Construct full photo URL if needed
-    if (student.photo) {
-      student.photoUrl = `${process.env.BASE_URL}/uploads/photos/${student.photo}`;
+    
+    // Get attendance records for this student
+    const attendanceRecords = await Attendance.find({
+      'students.student': student._id
+    })
+    .sort({ date: 1 })
+    .populate('class')
+    .lean();
+
+    
+    
+
+    // Process attendance statistics
+    const studentAttendance = attendanceRecords.map(record => {
+      const studentEntry = record.students.find(s => 
+        s.student.toString() === student._id.toString()
+      );
+      
+      return {
+        date: record.date,
+        status: studentEntry?.status || 'absent',
+        subject: studentEntry?.subjects[0]?.name || 'N/A',
+        timing: record.timing
+      };
+    });
+
+    const attendanceStats = {
+      totalDays: studentAttendance.length,
+      present: studentAttendance.filter(a => a.status === 'present').length,
+      absent: studentAttendance.filter(a => a.status === 'absent').length,
+      percentage: 0
+    };
+
+    if (attendanceStats.totalDays > 0) {
+      attendanceStats.percentage = Math.round(
+        (attendanceStats.present / attendanceStats.totalDays) * 100
+      );
     }
 
-    res.status(200).json(student);
+    const response = {
+      id: student._id,
+      name: student.name,
+      rollNumber: student.rollNumber,
+      department: student.department,
+      semester: student.semester,
+      class: student.class,
+      photo: student.photo ? `http://localhost:3000/uploads/${student.photo}` : null,
+      attendanceStats,
+      recentAttendance: studentAttendance.slice(0, 5)
+    };
+
+    console.log('Sending response:', response);
+    res.status(200).json(response);
   } catch (error) {
+    console.error('Get complete profile error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -241,6 +288,53 @@ export const generateQRCode = async (req, res) => {
     res.status(200).json({ qrCode: qrCodeDataUrl });
   } catch (error) {
     console.error('QR Code generation error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getStudentProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log('Looking up student with userId:', id);
+    
+    const student = await Student.findOne({ userId: id })
+      .populate('class')
+      .populate({
+        path: 'attendance',
+        select: 'date status subjects timing',
+        options: { sort: { date: -1 } }
+      });
+
+    if (!student) {
+      console.log('No student found for userId:', id);
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    console.log('Found student:', student.name);
+
+    // Format the response
+    const response = {
+      id: student._id,
+      name: student.name,
+      rollNumber: student.rollNumber,
+      department: student.department,
+      semester: student.semester,
+      class: student.class,
+      photo: student.photo ? `/uploads/${student.photo}` : null,
+      attendanceStats: {
+        totalDays: student.attendance?.length || 0,
+        present: student.attendance?.filter(a => a.status === 'present').length || 0,
+        absent: student.attendance?.filter(a => a.status === 'absent').length || 0,
+        percentage: student.attendance?.length 
+          ? Math.round((student.attendance.filter(a => a.status === 'present').length / student.attendance.length) * 100)
+          : 0
+      },
+      recentAttendance: student.attendance?.slice(0, 5) || []
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Get student profile error:', error);
     res.status(500).json({ message: error.message });
   }
 };

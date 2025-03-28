@@ -15,17 +15,9 @@ const AttendanceReports = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('Daily Report');
-  const [attendanceData, setAttendanceData] = useState([
-    {
-      class: 'FE - A',
-      totalStudents: 60,
-      present: 55,
-      absent: 5,
-      percentage: 91.67
-    },
-    // Add more sample data or fetch from API
-  ]);
+  const [attendanceData, setAttendanceData] = useState([]);
   const [dailyReportData, setDailyReportData] = useState(null);
+  const [studentReportData, setStudentReportData] = useState([]);
 
   useEffect(() => {
     fetchClasses();
@@ -90,10 +82,37 @@ const AttendanceReports = () => {
     }
   };
 
+  const fetchStudentReport = async () => {
+    try {
+      if (!selectedClass || !selectedSubject) {
+        setStudentReportData([]);
+        return;
+      }
+
+      setLoading(true);
+      const response = await api.getStudentReport(selectedClass, selectedSubject);
+      
+      if (response.success) {
+        setStudentReportData(Array.isArray(response.data) ? response.data : []);
+      } else {
+        console.error('Failed to fetch report:', response.message);
+        setStudentReportData([]);
+      }
+    } catch (error) {
+      console.error('Error fetching student report:', error);
+      setStudentReportData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Add useEffect to fetch report when date changes
   useEffect(() => {
-    if (activeTab === 'Daily Report' && selectedClass && selectedSubject) {
-      fetchDailyReport();
+    if (activeTab === 'Daily Report') {
+      setDailyReportData(null); // Reset data before fetching new data
+      if (selectedClass && selectedSubject) {
+        fetchDailyReport();
+      }
     }
   }, [startDate, selectedClass, selectedSubject]);
 
@@ -105,22 +124,19 @@ const AttendanceReports = () => {
       }
 
       setLoading(true);
-      const response = await api.generateAttendanceReport({
+      const pdfBlob = await api.generateAttendanceReport({
         classId: selectedClass,
         subjectId: selectedSubject,
         reportType,
         startDate: new Date(startDate).toISOString()
       });
 
-      // Convert the response data to a blob
-      const blob = new Blob([response], { type: 'application/pdf' });
-      const fileName = `attendance-report-${reportType}-${format(new Date(), 'yyyy-MM-dd')}.pdf`;
-      FileSaver.saveAs(blob, fileName);
+      FileSaver.saveAs(pdfBlob, `attendance-report-${reportType}-${format(new Date(startDate), 'yyyy-MM-dd')}.pdf`);
       setShowExportModal(false);
 
     } catch (error) {
       console.error('Error generating report:', error);
-      alert(error.response?.data?.message || 'Failed to generate report');
+      alert(error.message || 'Failed to generate report');
     } finally {
       setLoading(false);
     }
@@ -128,21 +144,31 @@ const AttendanceReports = () => {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    if (tab === 'Daily Report') {
-      fetchDailyReport();
-    }
-    switch (tab) {
-      case 'Daily Report':
+    setDailyReportData(null);
+    setStudentReportData([]);
+    
+    // Add delay to prevent race conditions
+    setTimeout(() => {
+      if (tab === 'Daily Report' && selectedClass && selectedSubject) {
         fetchDailyReport();
-        break;
-      case 'Monthly Report':
-        // Fetch monthly report data
-        break;
-      case 'Student Report':
-        // Fetch student-wise report data
-        break;
-      default:
-        break;
+      } else if (tab === 'Student Report' && selectedClass && selectedSubject) {
+        fetchStudentReport();
+      }
+    }, 100);
+  };
+
+  // Update class/subject selection handlers
+  const handleClassChange = (e) => {
+    setSelectedClass(e.target.value);
+    if (activeTab === 'Daily Report') {
+      setDailyReportData(null);
+    }
+  };
+
+  const handleSubjectChange = (e) => {
+    setSelectedSubject(e.target.value);
+    if (activeTab === 'Daily Report') {
+      setDailyReportData(null);
     }
   };
 
@@ -171,7 +197,7 @@ const AttendanceReports = () => {
             <div className="relative w-full">
               <select 
                 value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
+                onChange={handleClassChange}
                 className="w-full bg-gray-800 text-white p-2 rounded appearance-none"
               >
                 <option value="">Select Class</option>
@@ -190,7 +216,7 @@ const AttendanceReports = () => {
             <div className="relative w-full">
               <select 
                 value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
+                onChange={handleSubjectChange}
                 className="w-full bg-gray-800 text-white p-2 rounded appearance-none"
               >
                 <option value="">Select Subject</option>
@@ -208,7 +234,7 @@ const AttendanceReports = () => {
           </div>
 
           <div className="flex border-b border-gray-800 mb-4">
-            {['Daily Report', 'Monthly Report', 'Student Report'].map(tab => (
+            {['Daily Report', 'Student Report'].map(tab => (
               <button
                 key={tab}
                 onClick={() => handleTabChange(tab)}
@@ -237,29 +263,47 @@ const AttendanceReports = () => {
                   Select class and subject to view report
                 </div>
               )
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="text-gray-400 text-left border-b border-gray-800">
-                    <th className="p-3">Class</th>
-                    <th className="p-3">Total Students</th>
-                    <th className="p-3">Present</th>
-                    <th className="p-3">Absent</th>
-                    <th className="p-3">Percentage</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {attendanceData.map((data) => (
-                    <tr key={data.class} className="border-b border-gray-800">
-                      <td className="p-3">{data.class}</td>
-                      <td className="p-3">{data.totalStudents}</td>
-                      <td className="p-3 text-green-500">{data.present}</td>
-                      <td className="p-3 text-red-500">{data.absent}</td>
-                      <td className="p-3">{data.percentage}%</td>
+            ) : activeTab === 'Student Report' ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-gray-400 text-left border-b border-gray-800">
+                      <th className="p-3">Student Name</th>
+                      <th className="p-3">Roll Number</th>
+                      <th className="p-3">Total Lectures</th>
+                      <th className="p-3">Present</th>
+                      <th className="p-3">Absent</th>
+                      <th className="p-3">Percentage</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {studentReportData.map((student) => (
+                      <tr key={student.rollNumber} className="border-b border-gray-800 hover:bg-gray-800/50">
+                        <td className="p-3">{student.name}</td>
+                        <td className="p-3">{student.rollNumber}</td>
+                        <td className="p-3">{student.totalLectures}</td>
+                        <td className="p-3 text-green-500">{student.present}</td>
+                        <td className="p-3 text-red-500">{student.absent}</td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-green-500 rounded-full"
+                                style={{ width: `${student.percentage}%` }}
+                              />
+                            </div>
+                            <span>{student.percentage}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                Select class and subject to view report
+              </div>
             )}
           </div>
         </div>

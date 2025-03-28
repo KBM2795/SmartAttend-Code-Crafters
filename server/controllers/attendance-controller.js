@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import QRSession from '../models/qr-session-model.js';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 
 // Dynamic import for axios to handle potential missing module
 let axios;
@@ -358,77 +359,73 @@ export const getDailyReport = async (req, res) => {
 
 export const getMonthlyReport = async (req, res) => {
   try {
-    const { classId, month, year } = req.query;
+    const { classId } = req.query;
     const teacherId = req.user._id;
 
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
+    // Input validation - only require classId
+    if (!classId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Class ID is required'
+      });
+    }
 
+    // Get current month/year by default
+    const currentDate = new Date();
+    const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+
+    // Get total students in class
+    const totalStudents = await Student.countDocuments({ class: classId });
+
+    // Get attendance records
     const attendanceRecords = await Attendance.find({
       class: classId,
       date: { $gte: startDate, $lte: endDate },
       markedBy: teacherId
-    })
-    .populate('students.student', 'name rollNumber')
-    .populate('class', 'name section')
-    .sort({ date: 1, 'timing.startTime': 1 });
+    }).lean();
 
-    // Process monthly summary
+    // Initialize summary
     const summary = {
+      totalStudents,
       totalDays: 0,
-      studentWise: {},
-      subjectWise: {},
-      dayWise: {}
+      present: 0,
+      absent: 0,
+      percentage: 0
     };
 
-    attendanceRecords.forEach(record => {
-      const dateKey = record.date.toISOString().split('T')[0];
-      if (!summary.dayWise[dateKey]) {
-        summary.dayWise[dateKey] = {
-          present: 0,
-          absent: 0,
-          total: record.students.length
-        };
-        summary.totalDays++;
-      }
-
-      record.students.forEach(student => {
-        // Initialize student record if not exists
-        if (!summary.studentWise[student.student._id]) {
-          summary.studentWise[student.student._id] = {
-            name: student.student.name,
-            rollNumber: student.student.rollNumber,
-            present: 0,
-            absent: 0,
-            total: 0
-          };
-        }
-
-        // Update student attendance
-        summary.studentWise[student.student._id][student.status]++;
-        summary.studentWise[student.student._id].total++;
-        summary.dayWise[dateKey][student.status]++;
-
-        // Update subject-wise attendance
-        student.subjects.forEach(subj => {
-          if (!summary.subjectWise[subj.name]) {
-            summary.subjectWise[subj.name] = { present: 0, absent: 0 };
+    // Process records
+    if (attendanceRecords.length > 0) {
+      summary.totalDays = attendanceRecords.length;
+      attendanceRecords.forEach(record => {
+        record.students?.forEach(student => {
+          if (student.status === 'present') {
+            summary.present++;
+          } else {
+            summary.absent++;
           }
-          summary.subjectWise[subj.name][subj.status]++;
         });
       });
-    });
+    }
+
+    // Calculate percentage
+    const totalPossibleAttendance = totalStudents * summary.totalDays;
+    summary.percentage = totalPossibleAttendance > 0 
+      ? Math.round((summary.present / totalPossibleAttendance) * 100) 
+      : 0;
 
     res.status(200).json({
-      month,
-      year,
+      success: true,
       summary,
-      records: attendanceRecords
+      dateRange: { startDate, endDate }
     });
 
   } catch (error) {
     console.error('Monthly report error:', error);
-    res.status(500).json({ message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to generate monthly report'
+    });
   }
 };
 
@@ -499,69 +496,203 @@ export const getTodayClassReport = async (req, res) => {
 };
 
 const generateSummarySection = (doc, summary) => {
-  doc.fontSize(14).text('Summary Statistics', { underline: true });
-  doc.moveDown();
+  // Add summary box with border
+  const boxTop = doc.y;
+  doc.rect(50, boxTop, 500, 100)
+     .stroke('#cccccc');
+
+  // Add summary title
+  doc.fontSize(14)
+     .fillColor('#000000')
+     .text('Summary Statistics', 60, boxTop + 10)
+     .moveDown(0.5);
+
+  // Add summary content in two columns
+  const leftColumn = [
+    ['Total Students', summary.totalStudents],
+    ['Total Present', summary.totalPresent],
+    ['Total Absent', summary.totalAbsent]
+  ];
+
+  const rightColumn = [
+    ['Average Attendance', `${summary.averageAttendance.toFixed(2)}%`],
+    ['Total Classes', summary.totalClasses],
+    ['Period Coverage', summary.periodCoverage]
+  ];
+
+  // Draw columns
   doc.fontSize(10);
-  doc.text(`Average Attendance Rate: ${summary.averageAttendance.toFixed(2)}%`);
-  doc.text(`Total Students: ${summary.totalStudents}`);
-  doc.text(`Total Present: ${summary.totalPresent}`);
-  doc.moveDown();
+  leftColumn.forEach((row, index) => {
+    doc.text(row[0], 70, boxTop + 40 + (index * 20))
+       .text(row[1].toString(), 180, boxTop + 40 + (index * 20));
+  });
+
+  rightColumn.forEach((row, index) => {
+    doc.text(row[0], 300, boxTop + 40 + (index * 20))
+       .text(row[1].toString(), 410, boxTop + 40 + (index * 20));
+  });
+
+  doc.moveDown(6);
 };
 
-const generateAttendanceTable = (doc, data) => {
-  // ...implementation for detailed table...
-};
-
-const generateCharts = (doc, summary) => {
-  // ...implementation for charts using PDFKit...
-};
-
-const generatePDFContent = (doc, data) => {
-  try {
-    // Add header
-    doc.fontSize(20).text('Attendance Report', { align: 'center' });
-    doc.moveDown();
+const generateDetailedAttendanceTable = (doc, records) => {
+    doc.fontSize(14)
+       .fillColor('#000000')
+       .text('Detailed Attendance Records', { underline: true })
+       .moveDown();
+  
+    // Table headers
+    const startY = doc.y;
+    const columnWidths = [120, 80, 100, 100, 100];
     
-    // Add report info
-    doc.fontSize(12);
-    doc.text(`Class: ${data.className} ${data.section}`);
-    doc.text(`Subject: ${data.subject}`);
-    doc.text(`Period: ${format(data.startDate, 'PP')} to ${format(data.endDate, 'PP')}`);
-    doc.text(`Report Type: ${data.reportType}`);
+    doc.fontSize(10)
+       .fillColor('#666666')
+       .text('Student Name', 50, startY, { width: columnWidths[0] })
+       .text('Roll Number', 170, startY, { width: columnWidths[1] })
+       .text('Status', 250, startY, { width: columnWidths[2] })
+       .text('Date', 350, startY, { width: columnWidths[3] })
+       .text('Time', 450, startY, { width: columnWidths[4] });
+  
     doc.moveDown();
-
-    // Add attendance details
-    doc.fontSize(14).text('Attendance Records', { underline: true });
-    doc.moveDown();
-
-    data.records.forEach(record => {
-      doc.fontSize(12).text(format(new Date(record.date), 'PP'), { bold: true });
-      doc.moveDown();
-
-      // Create a table-like structure
-      const tableTop = doc.y;
-      let currentY = tableTop;
-
-      // Headers
-      doc.text('Name', 50, currentY);
-      doc.text('Roll Number', 200, currentY);
-      doc.text('Status', 350, currentY);
-      currentY += 20;
-
-      record.students.forEach(student => {
+    let currentY = doc.y;
+  
+    // Draw horizontal line under headers
+    doc.moveTo(50, currentY - 5)
+       .lineTo(550, currentY - 5)
+       .stroke('#cccccc');
+  
+    // Table rows with alternating background
+    records.forEach((record, recordIndex) => {
+      record.students.forEach((student, index) => {
+        // Add new page if needed
         if (currentY > doc.page.height - 50) {
           doc.addPage();
           currentY = 50;
         }
-
-        doc.text(student.student.name, 50, currentY);
-        doc.text(student.student.rollNumber, 200, currentY);
-        doc.text(student.status.toUpperCase(), 350, currentY);
+  
+        // Draw alternating row backgrounds
+        if (index % 2 === 0) {
+          doc.rect(50, currentY - 5, 500, 20)
+             .fill('#f8f8f8');
+        }
+  
+        // Add student data
+        doc.fillColor('#000000')
+           .text(student.student.name, 50, currentY, { width: columnWidths[0] })
+           .text(student.student.rollNumber, 170, currentY, { width: columnWidths[1] })
+           .fillColor(student.status === 'present' ? '#22c55e' : '#ef4444')
+           .text(student.status.toUpperCase(), 250, currentY, { width: columnWidths[2] })
+           .fillColor('#000000')
+           .text(format(new Date(record.date), 'PPP'), 350, currentY, { width: columnWidths[3] })
+           .text(format(new Date(record.timing?.startTime || record.date), 'p'), 450, currentY, { width: columnWidths[4] });
+  
         currentY += 20;
       });
-
-      doc.moveDown(2);
+  
+      if (recordIndex < records.length - 1) {
+        doc.moveTo(50, currentY)
+           .lineTo(550, currentY)
+           .stroke('#cccccc');
+        currentY += 10;
+      }
     });
+  };
+
+const generateAttendanceCharts = (doc, summary) => {
+  doc.addPage();
+  doc.fontSize(14)
+     .fillColor('#000000')
+     .text('Attendance Analysis', { align: 'center' })
+     .moveDown(2);
+
+  // Draw attendance pie chart
+  const centerX = doc.page.width / 2;
+  const centerY = doc.y + 100;
+  const radius = 80;
+
+  const total = summary.totalPresent + summary.totalAbsent;
+  const presentAngle = (summary.totalPresent / total) * 2 * Math.PI;
+
+  // Draw present portion (green)
+  doc.path([
+    `M ${centerX} ${centerY}`,
+    `L ${centerX + radius} ${centerY}`,
+    `A ${radius} ${radius} 0 ${presentAngle > Math.PI ? 1 : 0} 1 ${
+      centerX + radius * Math.cos(presentAngle)
+    } ${centerY + radius * Math.sin(presentAngle)}`,
+    'Z'
+  ])
+  .fill('#22c55e');
+
+  // Draw absent portion (red)
+  doc.path([
+    `M ${centerX} ${centerY}`,
+    `L ${centerX + radius * Math.cos(presentAngle)} ${
+      centerY + radius * Math.sin(presentAngle)
+    }`,
+    `A ${radius} ${radius} 0 ${presentAngle <= Math.PI ? 1 : 0} 1 ${
+      centerX + radius
+    } ${centerY}`,
+    'Z'
+  ])
+  .fill('#ef4444');
+
+  // Add legend
+  doc.fontSize(10)
+     .fillColor('#000000')
+     .text(
+       `Present: ${summary.totalPresent} (${((summary.totalPresent / total) * 100).toFixed(1)}%)`,
+       centerX - 100,
+       centerY + radius + 30
+     )
+     .text(
+       `Absent: ${summary.totalAbsent} (${((summary.totalAbsent / total) * 100).toFixed(1)}%)`,
+       centerX + 20,
+       centerY + radius + 30
+     );
+};
+
+const generatePDFContent = (doc, data) => {
+  try {
+    // Set document metadata
+    doc.info.Title = `Attendance Report - ${data.className} ${data.section}`;
+    doc.info.Author = 'SmartAttend System';
+
+    // Add header with styling
+    doc.fontSize(24)
+       .fillColor('#000000')
+       .text('SmartAttend', { align: 'center' })
+       .fontSize(18)
+       .text('Attendance Report', { align: 'center' })
+       .moveDown();
+
+    // Add report details
+    doc.fontSize(12)
+       .text(`Class: ${data.className} ${data.section}`)
+       .text(`Subject: ${data.subject}`)
+       .text(`Period: ${format(data.startDate, 'PPP')} to ${format(data.endDate, 'PPP')}`)
+       .text(`Report Type: ${data.reportType.charAt(0).toUpperCase() + data.reportType.slice(1)}`)
+       .moveDown();
+
+    // Calculate and add summary
+    const summary = calculateAttendanceSummary(data.records);
+    generateSummarySection(doc, summary);
+    doc.moveDown();
+
+    // Add attendance details
+    generateDetailedAttendanceTable(doc, data.records);
+    
+    // Add visual charts
+    generateAttendanceCharts(doc, summary);
+
+    // Add footer
+    doc.fontSize(8)
+       .text(
+         `Generated on ${format(new Date(), 'PPpp')}`,
+         50,
+         doc.page.height - 50,
+         { align: 'center' }
+       );
 
   } catch (error) {
     console.error('PDF generation error:', error);
@@ -569,154 +700,159 @@ const generatePDFContent = (doc, data) => {
   }
 };
 
-export const createQRSession = async (req, res) => {
-  try {
-    const { classId, subject, location, startTime, endTime } = req.body;
-    const teacherId = req.user.teacherId;
+const calculateAttendanceSummary = (records) => {
+  const summary = {
+    totalStudents: 0,
+    totalPresent: 0,
+    totalAbsent: 0,
+    totalClasses: records.length,
+    averageAttendance: 0,
+    periodCoverage: '',
+  };
 
-    const sessionToken = crypto.randomBytes(32).toString('hex');
+  if (records.length > 0) {
+    summary.totalStudents = records[0].students.length;
     
-    const qrSession = new QRSession({
-      teacher: teacherId,
-      class: classId,
-      subject,
-      location: {
-        type: 'Point',
-        coordinates: [location.longitude, location.latitude],
-        radius: location.radius || 100
-      },
-      timing: {
-        startTime: new Date(startTime),
-        endTime: new Date(endTime)
-      },
-      sessionToken
+    records.forEach(record => {
+      record.students.forEach(student => {
+        if (student.status === 'present') {
+          summary.totalPresent++;
+        } else {
+          summary.totalAbsent++;
+        }
+      });
     });
 
-    await qrSession.save();
+    const totalEntries = summary.totalPresent + summary.totalAbsent;
+    summary.averageAttendance = totalEntries > 0 
+      ? (summary.totalPresent / totalEntries) * 100 
+      : 0;
 
-    // Generate encrypted QR data
-    const qrData = {
-      sessionToken,
-      timestamp: Date.now(),
-      expires: new Date(endTime).getTime()
-    };
-
-    const encryptedData = jwt.sign(qrData, process.env.JWT_SECRET, { expiresIn: '1h' });
-    const qrCodeData = await toDataURL(JSON.stringify({ token: encryptedData }));
-
-    res.status(201).json({
-      success: true,
-      qrCode: qrCodeData,
-      session: qrSession
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    // Calculate period coverage
+    const startDate = new Date(Math.min(...records.map(r => new Date(r.date))));
+    const endDate = new Date(Math.max(...records.map(r => new Date(r.date))));
+    summary.periodCoverage = `${format(startDate, 'PP')} - ${format(endDate, 'PP')}`;
   }
+
+  return summary;
 };
 
-export const markAttendanceByQR = async (req, res) => {
+export const createQRSession = async (req, res) => {
   try {
-    const { token, location } = req.body;
-    const studentId = req.user.studentId;
-
-    // Verify and decrypt token
-    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
-    const { sessionToken } = JSON.parse(decodedToken.token);
-
-    // Find active session
-    const session = await QRSession.findOne({ 
-      sessionToken,
-      active: true,
-      'timing.endTime': { $gt: new Date() }
-    });
-
-    if (!session) {
-      return res.status(404).json({ message: 'Invalid or expired QR session' });
-    }
-
-    // Check if already marked
-    if (session.markedAttendance.some(m => m.student.toString() === studentId)) {
-      return res.status(400).json({ message: 'Attendance already marked' });
-    }
-
-    // Verify location
-    const distance = calculateDistance(
-      location.latitude,
-      location.longitude,
-      session.location.coordinates[1],
-      session.location.coordinates[0]
-    );
-
-    if (distance > session.location.radius) {
-      return res.status(400).json({ message: 'You are too far from the class location' });
-    }
-
-    // Mark attendance
-    session.markedAttendance.push({
-      student: studentId,
-      timestamp: new Date(),
-      location: {
-        type: 'Point',
-        coordinates: [location.longitude, location.latitude]
-      }
+    const { classId, teacherId, duration } = req.body;
+    
+    const session = new QRSession({
+      classId,
+      teacherId,
+      duration: duration || 300, // 5 minutes default
+      location: req.body.location,
+      expiresAt: new Date(Date.now() + (duration || 300) * 1000)
     });
 
     await session.save();
-
-    // Update attendance record
-    await saveAttendance({
-      classId: session.class,
-      date: new Date(),
-      students: [{ id: studentId, status: 'present' }],
-      subject: session.subject,
-      subjectTeacherId: session.teacher
+    res.json({ 
+      success: true, 
+      sessionId: session._id,
+      expiresAt: session.expiresAt 
     });
-
-    res.status(200).json({ success: true, message: 'Attendance marked successfully' });
   } catch (error) {
+    console.error('Create QR Session Error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 export const verifyQRLocation = async (req, res) => {
   try {
-    const { location, sessionToken } = req.body;
-
-    const session = await QRSession.findOne({ 
-      sessionToken,
-      active: true,
-      'timing.endTime': { $gt: new Date() }
-    });
-
-    if (!session) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Invalid or expired QR session' 
+    const { sessionId, location, studentId } = req.body;
+    
+    const session = await QRSession.findById(sessionId);
+    if (!session || session.expiresAt < new Date()) {
+      return res.json({ 
+        isValid: false, 
+        message: 'QR session expired or invalid' 
       });
     }
 
-    // Calculate distance between student and class location
+    // Calculate distance between points
     const distance = calculateDistance(
       location.latitude,
       location.longitude,
-      session.location.coordinates[1],
-      session.location.coordinates[0]
+      session.location.latitude,
+      session.location.longitude
     );
 
-    const isWithinRange = distance <= session.location.radius;
+    const isWithinRange = distance <= 50; // 50 meters radius
+    res.json({ 
+      isValid: isWithinRange,
+      message: isWithinRange ? 'Location verified' : 'You are too far from class location'
+    });
+  } catch (error) {
+    console.error('Verify Location Error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
-    res.status(200).json({
+export const markAttendanceByQR = async (req, res) => {
+  try {
+    const { sessionId, studentId, classId, subject } = req.body;
+
+    // Validate session
+    const session = await QRSession.findById(sessionId);
+    if (!session) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired QR session'
+      });
+    }
+
+    // Check for existing attendance
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const existingAttendance = await Attendance.findOne({
+      class: classId,
+      date: { $gte: today, $lt: tomorrow },
+      'students.student': studentId,
+      'students.subjects.name': subject
+    });
+
+    if (existingAttendance) {
+      return res.status(400).json({
+        success: false,
+        message: 'Attendance already marked for today'
+      });
+    }
+
+    // Create or update attendance record
+    await Attendance.findOneAndUpdate(
+      {
+        class: classId,
+        date: today
+      },
+      {
+        $push: {
+          students: {
+            student: studentId,
+            status: 'present',
+            subjects: [{ name: subject, status: 'present' }]
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    res.json({
       success: true,
-      isWithinRange,
-      distance: Math.round(distance),
-      maxRadius: session.location.radius
+      message: 'Attendance marked successfully'
     });
 
   } catch (error) {
-    console.error('Location verification error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Failed to verify location' 
+    console.error('Mark Attendance Error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };
@@ -735,4 +871,89 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
   return R * c; // Distance in meters
+};
+
+export const getStudentWiseReport = async (req, res) => {
+  try {
+    const { classId, subjectName } = req.query;
+    
+    if (!classId || !subjectName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Class ID and Subject Name are required'
+      });
+    }
+
+    // Get students in the class first
+    const students = await Student.find({ class: classId })
+      .select('name rollNumber')
+      .lean();
+
+    if (!students || students.length === 0) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Get attendance records for the class and subject
+    const attendanceRecords = await Attendance.find({
+      class: classId,
+      'students.subjects.name': subjectName
+    }).populate('students.student');
+
+    // Process records to get student-wise summary
+    const studentSummary = {};
+    
+    // Initialize summary for all students
+    students.forEach(student => {
+      studentSummary[student._id.toString()] = {
+        name: student.name,
+        rollNumber: student.rollNumber,
+        totalLectures: 0,
+        present: 0,
+        absent: 0
+      };
+    });
+
+    // Process attendance records
+    attendanceRecords.forEach(record => {
+      record.students.forEach(student => {
+        if (!student?.student?._id) return;
+
+        const subjectStatus = student.subjects?.find(s => s.name === subjectName);
+        if (!subjectStatus) return;
+
+        const studentId = student.student._id.toString();
+        if (!studentSummary[studentId]) return;
+
+        studentSummary[studentId].totalLectures++;
+        if (subjectStatus.status === 'present') {
+          studentSummary[studentId].present++;
+        } else {
+          studentSummary[studentId].absent++;
+        }
+      });
+    });
+
+    // Convert to array and calculate percentages
+    const reportData = Object.values(studentSummary).map(student => ({
+      ...student,
+      percentage: student.totalLectures > 0 
+        ? Math.round((student.present / student.totalLectures) * 100) 
+        : 0
+    }));
+
+    res.json({
+      success: true,
+      data: reportData
+    });
+
+  } catch (error) {
+    console.error('Student report error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };

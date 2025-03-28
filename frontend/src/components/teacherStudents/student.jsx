@@ -194,6 +194,11 @@ const StudentsManagement = () => {
       semester: student.semester,
       contactNumber: student.contactNumber || '',
       section: student.section || '',
+      parentDetails: {
+        name: student.parentDetails?.name || '',
+        phone: student.parentDetails?.phone || '',
+        email: student.parentDetails?.email || ''
+      }
     });
     setIsEditModalOpen(true);
   };
@@ -201,24 +206,55 @@ const StudentsManagement = () => {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Create FormData object for file upload
+      const formDataObj = new FormData();
+      
+      // Append all student details
+      formDataObj.append('name', formData.name);
+      formDataObj.append('rollNumber', formData.rollNumber);
+      formDataObj.append('class', formData.class);
+      formDataObj.append('department', formData.department);
+      formDataObj.append('semester', formData.semester);
+      formDataObj.append('section', formData.section);
+      
+      // Append parent details as JSON string
+      formDataObj.append('parentDetails', JSON.stringify({
+        name: formData.parentDetails.name,
+        phone: formData.parentDetails.phone,
+        email: formData.parentDetails.email || ''
+      }));
+
+      // Append photo if a new one was selected
+      if (formData.photo instanceof File) {
+        formDataObj.append('photo', formData.photo);
+      }
+
       const response = await axios.put(
         `http://localhost:3000/api/students/${editingStudent._id}`,
-        formData,
+        formDataObj,
         {
           headers: {
+            'Content-Type': 'multipart/form-data',
             Authorization: `Bearer ${localStorage.getItem('token')}`,
           },
         }
       );
 
+      // Update the students list with the edited student
       setStudents(students.map(s => 
         s._id === editingStudent._id ? response.data : s
       ));
+      
+      // Reset form and close modal
       setIsEditModalOpen(false);
       setEditingStudent(null);
       setFormData(initialFormData);
+      
+      // Show success message
+      alert('Student updated successfully!');
     } catch (error) {
       console.error('Error updating student:', error);
+      alert(error.response?.data?.message || 'Error updating student');
     }
   };
 
@@ -283,7 +319,7 @@ const StudentsManagement = () => {
                 <th className="py-2 px-4">Roll Number</th>
                 <th className="py-2 px-4">Class</th>
                 <th className="py-2 px-4">Section</th>
-                <th className="py-2 px-4">Contact Number</th>
+                <th className="py-2 px-4">Semister</th>
                 <th className="py-2 px-4">Actions</th>
               </tr>
             </thead>
